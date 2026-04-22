@@ -8,36 +8,61 @@ import re
 # 設定
 API_KEY = '73656C726FF52816D957CE26286BE7A9'
 INPUT_FILE = 'data/한국어 학습용 어휘 목록_최종_スッキリ版.csv'
-OUTPUT_FILE = 'data/한국어 学習用語彙リスト_日本語訳付.csv'
+OUTPUT_FILE = 'data/한국어 학습용 어휘 목록_最終_日本語訳付.csv'
 PROGRESS_FILE = 'data/progress.txt'
 
-def clean_japanese_meaning(meaning, original_explanation):
-    """
-    辞書形式の日本語訳から、最適な漢字語または訳語を抽出する
-    例: 'かかく【価格】。ねだん【値段】' -> '価格, 値段'
-    """
-    if not meaning:
-        return ""
-    
-    # 【 】の中身を抽出する
-    kanji_matches = re.findall(r'【(.*?)】', meaning)
-    if kanji_matches:
-        # CSVの解説に漢字がある場合、それと一致するものを優先
-        if original_explanation:
-            for kanji in kanji_matches:
-                if kanji in original_explanation:
-                    return kanji
-        
-        # 一致がなくても、見つかった漢字をカンマで繋いで返す
-        return ', '.join(dict.fromkeys(kanji_matches)) # 重複除去して結合
-        
-    # 漢字がない場合は、句読点や記号を除去して返す
-    clean_val = re.sub(r'\[.*?\]|\(.*?\)', '', meaning) # [ ] や ( ) を除去
-    clean_val = clean_val.replace('。', ', ').replace(' ', '').strip(', ')
-    return clean_val
+def clean_word_name(word_text):
+    """APIの単語名から数字などを除去する"""
+    if not word_text: return ""
+    return re.sub(r'\d+', '', word_text).strip()
 
-def fetch_japanese_meaning(session, word, pos_target, original_explanation):
-    url = f"https://krdict.korean.go.kr/api/search?key={API_KEY}&q={word}&translated=y&trans_lang=2&num=10"
+def extract_meanings_from_item(item, max_per_item=2):
+    """
+    1つの辞書アイテムから代表的な日本語訳を抽出する。
+    漢字語を最優先。
+    """
+    meanings = []
+    senses = item.findall('sense')
+    
+    kanji_meanings = []
+    other_meanings = []
+    
+    for sense in senses:
+        trans_word = sense.find('.//trans_word')
+        if trans_word is None or not trans_word.text:
+            continue
+        
+        raw_text = trans_word.text
+        # 【 】の中の漢字を抽出
+        kanjis = re.findall(r'【(.*?)】', raw_text)
+        if kanjis:
+            for k in kanjis:
+                if k not in kanji_meanings:
+                    kanji_meanings.append(k)
+        else:
+            # 漢字がない場合は代表語を抽出
+            clean_text = re.sub(r'\[.*?\]|\(.*?\)', '', raw_text)
+            parts = [p.strip() for p in clean_text.replace('。', ',').split(',') if p.strip()]
+            for p in parts:
+                if p not in other_meanings:
+                    other_meanings.append(p)
+
+    combined = kanji_meanings + [m for m in other_meanings if m not in kanji_meanings]
+    return combined[:max_per_item]
+
+def fetch_japanese_meanings(session, target_word, target_sup_nos, target_pos_list):
+    """
+    指定された単語、複数の番号、品詞リストに基づき、APIから日本語訳を取得する。
+    """
+    # 音節数（単語の長さ）を取得
+    word_len = len(target_word)
+    # 詳細検索パラメータを追加: advanced=y, method=exact (完全一致), letter_s/e (文字数制限)
+    url = f"https://krdict.korean.go.kr/api/search?key={API_KEY}&q={target_word}&translated=y&trans_lang=2&num=50&advanced=y&method=exact&letter_s={word_len}&letter_e={word_len}"
+    
+    all_extracted_meanings = []
+    
+    # ターゲット番号のリストをクリーンアップ (例: ["02", "26"] -> ["2", "26"])
+    clean_target_sup_list = [str(int(n)) for n in target_sup_nos if n.strip().isdigit()]
     
     for attempt in range(3):
         try:
@@ -49,43 +74,38 @@ def fetch_japanese_meaning(session, word, pos_target, original_explanation):
             root = ET.fromstring(response.content)
             items = root.findall('.//item')
             
-            first_meaning_raw = ""
-            
-            for item in items:
-                pos_node = item.find('pos')
-                item_pos = pos_node.text if pos_node is not None and pos_node.text else ""
+            # 全てのターゲット番号について処理
+            for target_sup in (clean_target_sup_list if clean_target_sup_list else [""]):
+                matching_items = []
+                for item in items:
+                    item_word = clean_word_name(item.find('word').text)
+                    sup_no_node = item.find('sup_no')
+                    item_sup_no = sup_no_node.text if sup_no_node is not None else ""
+                    
+                    if item_word == target_word:
+                        if not target_sup or item_sup_no == target_sup:
+                            matching_items.append(item)
                 
-                if item_pos not in pos_target:
-                    continue
+                # 品詞ごとに意味を収集
+                for target_pos in target_pos_list:
+                    pos_items = [it for it in matching_items if (it.find('pos').text if it.find('pos') is not None else "") == target_pos]
+                    source_items = pos_items if pos_items else matching_items
                     
-                senses = item.findall('sense')
-                for sense in senses:
-                    dfn_node = sense.find('definition')
-                    definition = dfn_node.text if dfn_node is not None and dfn_node.text else ""
-                    
-                    trans_node = sense.find('.//trans_word')
-                    translation_raw = trans_node.text if trans_node is not None and trans_node.text else ""
-                    
-                    if not translation_raw:
-                        continue
-                    
-                    if not first_meaning_raw:
-                        first_meaning_raw = translation_raw
-                    
-                    # キーワードマッチング
-                    if original_explanation and definition:
-                        keywords = re.findall(r'[가-힣]{2,}', original_explanation)
-                        for kw in keywords:
-                            if kw in definition:
-                                return translation_raw
-                                
-            return first_meaning_raw
+                    for item in source_items:
+                        # 複数番号がある場合は、1番号1意味程度に絞ってスッキリさせる
+                        max_meanings = 1 if len(clean_target_sup_list) > 1 else 2
+                        meanings = extract_meanings_from_item(item, max_per_item=max_meanings)
+                        for m in meanings:
+                            if m not in all_extracted_meanings:
+                                all_extracted_meanings.append(m)
+
+            return all_extracted_meanings[:8] # 全体でも最大8つ程度に制限
             
         except Exception as e:
             print(f"Attempt {attempt+1} failed: {e}")
             time.sleep(2)
             
-    return ""
+    return all_extracted_meanings
 
 def main():
     start_from = 0
@@ -97,12 +117,14 @@ def main():
         except: pass
 
     rows = []
-    with open(INPUT_FILE, mode='r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        fieldnames = reader.fieldnames
-        if '일본어 뜻' not in fieldnames:
-            fieldnames.append('일본어 뜻')
-        rows = list(reader)
+    if os.path.exists(OUTPUT_FILE):
+        with open(OUTPUT_FILE, mode='r', encoding='utf-8-sig') as f:
+            rows = list(csv.DictReader(f))
+    else:
+        with open(INPUT_FILE, mode='r', encoding='utf-8-sig') as f:
+            rows = list(csv.DictReader(f))
+
+    fieldnames = ['번호', '순위', '단어', '단어번호', '품사', '품사 이름', '품사 (일본어)', '풀이（意味）', '등급', '일본어 뜻']
 
     print(f"Total rows: {len(rows)}. Starting from: {start_from}")
 
@@ -111,31 +133,29 @@ def main():
     try:
         for i in range(start_from, len(rows)):
             row = rows[i]
-            # 既にデータがある場合はスキップ（再開時用）
             if row.get('일본어 뜻'):
                 continue
 
             word = row['단어']
-            pos_names = row['품사 이름']
-            explanation = row['풀이（意味）']
+            sup_nos = [n.strip() for n in row['단어번호'].split(',') if n.strip()]
+            pos_names = [p.strip() for p in row['품사 이름'].split(',')]
             
-            # コンソール文字化け対策（ログ用）
-            print(f"[{i+1}/{len(rows)}] Processing...")
+            print(f"[{i+1}/{len(rows)}] Processing: {word} (Nos: {', '.join(sup_nos)})")
             
-            meaning_raw = fetch_japanese_meaning(session, word, pos_names, explanation)
-            meaning_clean = clean_japanese_meaning(meaning_raw, explanation)
-            row['일본어 뜻'] = meaning_clean
+            meanings = fetch_japanese_meanings(session, word, sup_nos, pos_names)
+            meaning_str = ', '.join(meanings)
+            row['일본어 뜻'] = meaning_str
             
-            if meaning_clean:
-                print(f" -> Result: {meaning_clean}")
+            if meaning_str:
+                print(f" -> Result: {meaning_str}")
             
-            # 1行ごとに保存（テスト用）
-            save_data(fieldnames, rows)
-            with open(PROGRESS_FILE, 'w') as f:
-                f.write(str(i + 1))
-            print(f"Progress saved at {i+1}")
+            if (i + 1) % 10 == 0 or (i + 1) == len(rows):
+                save_data(fieldnames, rows)
+                with open(PROGRESS_FILE, 'w') as f:
+                    f.write(str(i + 1))
+                print(f"--- Progress saved at {i+1} ---")
             
-            time.sleep(0.2) # 少し長めにスリープ
+            time.sleep(0.1)
             
     except KeyboardInterrupt:
         print("Interrupted.")
@@ -145,10 +165,9 @@ def main():
 
 def save_data(fieldnames, rows):
     with open(OUTPUT_FILE, mode='w', encoding='utf-8-sig', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
         writer.writeheader()
         writer.writerows(rows)
 
 if __name__ == "__main__":
     main()
-

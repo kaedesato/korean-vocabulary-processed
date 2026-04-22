@@ -14,5 +14,26 @@ env/
 
 # Data / Temp
 temp/
-# Intermediate files if any
 *_tmp.csv
+
+# ツール設定
+.gemini/
+gha-creds-*.json
+
+# ログファイル
+*.log
+
+# 作業用一時ファイル（APIクロール途中経過）
+data/level1_api_progress.jsonl
+data/level1_api_raw.jsonl
+data/progress.txt
+
+# 大容量rawデータ（再生成可能）
+data/raw_dictionary.jsonl
+
+# 指示・メモ（作業用テキスト）
+指示.md
+
+# XLSファイル（容量大、CSV版あり）
+*.xls
+*.xlsx

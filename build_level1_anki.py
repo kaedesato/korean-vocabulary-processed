@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import http.client
 import json
 import os
 import re
 import time
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -19,162 +19,6 @@ DEFAULT_OUTPUT = ROOT / "level1_anki_new.csv"
 DEFAULT_REVIEW_OUTPUT = ROOT / "level1_anki_new_review.csv"
 DEFAULT_DOTENV = ROOT / ".env"
 DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini"
-
-
-HANJA_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+")
-BRACKET_NOTE_RE = re.compile(r"\[([^\]]+)\]")
-LEADING_MARK_RE = re.compile(r"^[▼\-\s]+")
-
-
-COMPAT_CHAR_MAP = str.maketrans(
-    {
-        "國": "国",
-        "學": "学",
-        "體": "体",
-        "會": "会",
-        "廣": "広",
-        "圖": "図",
-        "實": "実",
-        "寫": "写",
-        "標": "標",
-        "號": "号",
-        "臺": "台",
-        "臺": "台",
-        "發": "発",
-        "變": "変",
-        "靑": "青",
-        "靜": "静",
-        "說": "説",
-        "讀": "読",
-        "貝": "貝",
-        "書": "書",
-        "進": "進",
-        "轉": "転",
-        "萬": "万",
-        "幣": "幣",
-        "勞": "労",
-        "時": "時",
-        "參": "参",
-        "氣": "気",
-        "無": "無",
-        "關": "関",
-        "內": "内",
-        "舊": "旧",
-        "麵": "麺",
-        "麥": "麦",
-        "點": "点",
-        "頭": "頭",
-        "齊": "斉",
-        "館": "館",
-        "劍": "剣",
-        "圍": "囲",
-        "藝": "芸",
-        "顏": "顔",
-        "漢": "漢",
-        "劃": "画",
-        "雲": "雲",
-        "電": "電",
-        "魚": "魚",
-        "馬": "馬",
-    }
-)
-
-
-LOAN_KATA_OVERRIDES = {
-    "air conditioner": "エアコン",
-    "allergie": "アレルギー",
-    "album": "アルバム",
-    "apartment": "アパート",
-    "auto bicycle": "オートバイ",
-    "ball": "ボール",
-    "ball pen": "ボールペン",
-    "ballet": "バレエ",
-    "band": "バンド",
-    "banana": "バナナ",
-    "battery": "バッテリー",
-    "bell": "ベル",
-    "belt": "ベルト",
-    "veranda": "ベランダ",
-    "block": "ブロック",
-    "boiler": "ボイラー",
-    "bonus": "ボーナス",
-    "boat": "ボート",
-    "box": "ボックス",
-    "brake": "ブレーキ",
-    "building": "ビル",
-    "bus": "バス",
-    "button": "ボタン",
-    "bye-bye": "バイバイ",
-    "center": "センター",
-    "cider": "サイダー",
-    "diamond": "ダイヤモンド",
-    "diet": "ダイエット",
-    "drama": "ドラマ",
-    "dress": "ドレス",
-    "elevator": "エレベーター",
-    "energy": "エネルギー",
-    "game": "ゲーム",
-    "gas": "ガス",
-    "gas range": "ガスレンジ",
-    "goal": "ゴール",
-    "guitar": "ギター",
-    "gum": "ガム",
-    "ice cream": "アイスクリーム",
-    "ink": "インク",
-    "internet": "インターネット",
-    "jungle": "ジャングル",
-    "jumper": "ジャンパー",
-    "lighter": "ライター",
-    "mask": "マスク",
-    "manicure": "マニキュア",
-    "mat": "マット",
-    "mayonnaise": "マヨネーズ",
-    "medal": "メダル",
-    "memo": "メモ",
-    "message": "メッセージ",
-    "mike": "マイク",
-    "menu": "メニュー",
-    "necktie": "ネクタイ",
-    "news": "ニュース",
-    "one-piece": "ワンピース",
-    "orange": "オレンジ",
-    "radio": "ラジオ",
-    "remote control": "リモコン",
-    "ribbon": "リボン",
-    "rocket": "ロケット",
-    "robot": "ロボット",
-    "râmen": "ラーメン",
-    "tonkasu": "トンカツ",
-    "sandwich": "サンドイッチ",
-    "sausage": "ソーセージ",
-    "service": "サービス",
-    "shampoo": "シャンプー",
-    "show": "ショー",
-    "shower": "シャワー",
-    "sign": "サイン",
-    "size": "サイズ",
-    "skate": "スケート",
-    "sketchbook": "スケッチブック",
-    "ski": "スキー",
-    "smartphone": "スマートフォン",
-    "sofa": "ソファ",
-    "speaker": "スピーカー",
-    "sports": "スポーツ",
-    "sticker": "ステッカー",
-    "steak": "ステーキ",
-    "supermarket": "スーパーマーケット",
-    "sweater": "セーター",
-    "switch": "スイッチ",
-    "sunglasses": "サングラス",
-    "sweet": "スイート",
-    "violin": "バイオリン",
-    "virus": "ウイルス",
-    "vitamin": "ビタミン",
-    "wink": "ウインク",
-    "white shirt": "ワイシャツ",
-    "yogurt": "ヨーグルト",
-    "zhajiangmian": "ジャージャー麺",
-}
 
 
 @dataclass
@@ -197,11 +41,6 @@ def clean_text(value: str | None) -> str:
 
 def normalize_spaces(value: str) -> str:
     return re.sub(r"\s+", " ", clean_text(value))
-
-
-def normalize_compat_kanji(value: str) -> str:
-    text = unicodedata.normalize("NFKC", clean_text(value))
-    return text.translate(COMPAT_CHAR_MAP)
 
 
 def load_env_file(path: Path) -> None:
@@ -230,7 +69,7 @@ def normalize_llm_output(text: str) -> str:
     cleaned = clean_text(text)
     cleaned = cleaned.replace("\r\n", "\n")
     cleaned = re.sub(r"\s+", " ", cleaned)
-    return normalize_compat_kanji(cleaned)
+    return cleaned
 
 
 def _extract_json_candidate(text: str) -> str:
@@ -243,7 +82,7 @@ def _extract_json_candidate(text: str) -> str:
     return match.group(0) if match else ""
 
 
-def call_openrouter_batch_translation(batch_items: list[dict[str, str]], model: str) -> dict[int, str]:
+def call_openrouter_batch_translation(batch_items: list[dict[str, str]], model: str, timeout: int) -> dict[int, str]:
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key or not batch_items:
         return {}
@@ -285,7 +124,7 @@ def call_openrouter_batch_translation(batch_items: list[dict[str, str]], model: 
         method="POST",
     )
     try:
-        with request.urlopen(req, timeout=60) as resp:
+        with request.urlopen(req, timeout=max(5, timeout)) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         content = data["choices"][0]["message"]["content"]
         json_text = _extract_json_candidate(content)
@@ -305,11 +144,11 @@ def call_openrouter_batch_translation(batch_items: list[dict[str, str]], model: 
                 if translation:
                     result[idx] = translation
         return result
-    except (error.URLError, error.HTTPError, KeyError, IndexError, json.JSONDecodeError):
+    except (error.URLError, error.HTTPError, http.client.RemoteDisconnected, TimeoutError, KeyError, IndexError, json.JSONDecodeError):
         return {}
 
 
-def call_openrouter_translation(word: str, word_type: str, origin: str, meaning: str, model: str) -> str:
+def call_openrouter_translation(word: str, word_type: str, origin: str, meaning: str, model: str, timeout: int) -> str:
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key:
         return ""
@@ -343,11 +182,11 @@ def call_openrouter_translation(word: str, word_type: str, origin: str, meaning:
         method="POST",
     )
     try:
-        with request.urlopen(req, timeout=30) as resp:
+        with request.urlopen(req, timeout=max(5, timeout)) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         text = data["choices"][0]["message"]["content"].strip()
         return normalize_llm_output(text)
-    except (error.URLError, error.HTTPError, KeyError, IndexError, json.JSONDecodeError):
+    except (error.URLError, error.HTTPError, http.client.RemoteDisconnected, TimeoutError, KeyError, IndexError, json.JSONDecodeError):
         return ""
 
 
@@ -363,11 +202,22 @@ def translate_rows_with_openrouter(
     model: str,
     batch_size: int,
     retries: int,
+    timeout: int,
+    progress_every: int,
 ) -> TranslationResult:
     translations = [""] * len(rows)
     request_count = 0
+    total = len(rows)
+    if total == 0:
+        return TranslationResult(translations=translations, request_count=request_count)
 
-    for start, batch in chunked_rows(rows, batch_size):
+    total_batches = (total + max(1, batch_size) - 1) // max(1, batch_size)
+    print(
+        f"LLM translation start: rows={total}, batch_size={batch_size}, batches={total_batches}, retries={retries}, timeout={timeout}s",
+        flush=True,
+    )
+
+    for batch_idx, (start, batch) in enumerate(chunked_rows(rows, batch_size), start=1):
         batch_items = [
             {
                 "id": start + i,
@@ -382,10 +232,14 @@ def translate_rows_with_openrouter(
         batch_result: dict[int, str] = {}
         for attempt in range(retries + 1):
             request_count += 1
-            batch_result = call_openrouter_batch_translation(batch_items, model)
+            batch_result = call_openrouter_batch_translation(batch_items, model, timeout)
             if batch_result:
                 break
             if attempt < retries:
+                print(
+                    f"Batch {batch_idx}/{total_batches}: empty response, retry {attempt + 1}/{retries}",
+                    flush=True,
+                )
                 time.sleep(min(2 ** attempt, 8))
 
         for item in batch_items:
@@ -404,9 +258,20 @@ def translate_rows_with_openrouter(
                 item["origin"],
                 item["meaning"],
                 model,
+                timeout,
             )
             if single:
                 translations[int(item["id"])] = single
+
+        if progress_every <= 0:
+            progress_every = 1
+        if batch_idx % progress_every == 0 or batch_idx == total_batches:
+            done = min(start + len(batch), total)
+            translated_count = sum(1 for t in translations if t)
+            print(
+                f"Progress: batch {batch_idx}/{total_batches}, rows {done}/{total}, translated {translated_count}/{total}, requests {request_count}",
+                flush=True,
+            )
 
     return TranslationResult(translations=translations, request_count=request_count)
 
@@ -441,48 +306,6 @@ def split_definition_blocks(definition: str) -> list[str]:
     return blocks or [text]
 
 
-def extract_hanja_sequences(text: str) -> list[str]:
-    return HANJA_RE.findall(text or "")
-
-
-def get_hanja_translation(row: dict[str, str]) -> tuple[str, list[str]]:
-    candidates: list[str] = []
-    candidates.extend(extract_hanja_sequences(row.get("원어", "")))
-    candidates.extend(extract_hanja_sequences(row.get("어휘", "")))
-    uniq: list[str] = []
-    seen: set[str] = set()
-    for cand in candidates:
-        cand = cand.strip()
-        if cand and cand not in seen:
-            uniq.append(normalize_compat_kanji(cand))
-            seen.add(cand)
-    return (" / ".join(uniq), uniq) if uniq else ("", [])
-
-
-def split_origin(origin: str) -> tuple[str, str]:
-    text = clean_text(origin)
-    if not text:
-        return "", ""
-    notes = " | ".join(dict.fromkeys(BRACKET_NOTE_RE.findall(text)))
-    core = BRACKET_NOTE_RE.sub("", text)
-    core = core.replace("←", "")
-    core = LEADING_MARK_RE.sub("", core)
-    core = core.replace("▼", "")
-    core = normalize_spaces(core)
-    core = core.replace(" - ", "-")
-    return core.strip(), notes.strip()
-
-
-def loanword_candidates(origin_raw: str) -> tuple[str, str, bool]:
-    core, _notes = split_origin(origin_raw)
-    key = core.lower()
-    katakana = LOAN_KATA_OVERRIDES.get(key, "")
-    if not katakana and core:
-        katakana = core
-    has_clean_fallback = bool(core and katakana == core)
-    return katakana, core, has_clean_fallback
-
-
 def normalize_meaning_for_review(text: str) -> str:
     text = sanitize_definition(text)
     text = text.replace("\r\n", "\n")
@@ -506,56 +329,9 @@ def build_tags(grade: str, word_type: str, flags: Iterable[str]) -> str:
     return " ".join(tags)
 
 
-def choose_japanese_translation(row: dict[str, str]) -> tuple[str, list[str], list[str], bool]:
-    word_type = clean_text(row.get("어종", ""))
-    definition_blocks = split_definition_blocks(row.get("의미", ""))
-    flags: list[str] = []
-    review = False
-
-    if len(definition_blocks) > 1:
-        flags.append("multi_gloss")
-
-    if word_type == "한자어":
-        translation, candidates = get_hanja_translation(row)
-        if not translation:
-            review = True
-            flags.append("hanja_no_candidate")
-        elif len(candidates) > 1:
-            flags.append("multi_kanji")
-        return normalize_compat_kanji(translation), ["", ""], flags, review
-
-    if word_type == "외래어":
-        katakana, origin_core, raw_fallback = loanword_candidates(row.get("원어", ""))
-        if not katakana:
-            review = True
-            flags.append("origin_missing")
-        if raw_fallback:
-            flags.append("loan_raw_fallback")
-        return normalize_compat_kanji(katakana or origin_core), [normalize_compat_kanji(katakana), normalize_compat_kanji(origin_core)], flags, review
-
-    translation = ""
-    if definition_blocks:
-        joined = " ".join(definition_blocks)
-        hanja = extract_hanja_sequences(joined)
-        if hanja:
-            translation = " / ".join(dict.fromkeys(normalize_compat_kanji(item) for item in hanja))
-            if len(hanja) > 1:
-                flags.append("multi_kanji")
-        else:
-            review = True
-            flags.append("native_manual_review")
-    else:
-        review = True
-        flags.append("definition_missing")
-    return normalize_compat_kanji(translation), ["", ""], flags, review
-
-
 def process_row(
     row: dict[str, str],
     llm_translation: str = "",
-    use_rule_fallback: bool = False,
-    use_openrouter: bool = False,
-    openrouter_model: str = DEFAULT_OPENROUTER_MODEL,
 ) -> ProcessedRow:
     grade = clean_text(row.get("등급", ""))
     word = clean_text(row.get("어휘", ""))
@@ -567,17 +343,6 @@ def process_row(
     loan_candidates = ["", ""]
     flags: list[str] = []
     review = False
-
-    if not translation and use_rule_fallback:
-        translation, loan_candidates, flags, review = choose_japanese_translation(row)
-
-    if use_openrouter and not translation:
-        translated = call_openrouter_translation(word, word_type, clean_text(row.get("원어", "")), definition, openrouter_model)
-        if translated:
-            translation = translated
-            review = False
-            flags = [flag for flag in flags if flag != "needs_manual_review"]
-            flags.append("llm_translation")
 
     if had_multi_pos:
         flags.append("multi_pos")
@@ -638,7 +403,8 @@ def main() -> int:
     parser.add_argument("--openrouter-model", default=os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL), help="OpenRouter model name")
     parser.add_argument("--llm-batch-size", type=int, default=25, help="Batch size for OpenRouter translation requests")
     parser.add_argument("--llm-retries", type=int, default=2, help="Retry count for failed batch requests")
-    parser.add_argument("--rule-fallback", action="store_true", help="Use legacy rule-based fallback when LLM translation is empty")
+    parser.add_argument("--llm-timeout", type=int, default=30, help="Timeout seconds per OpenRouter request")
+    parser.add_argument("--progress-every", type=int, default=1, help="Print progress every N batches")
     args = parser.parse_args()
 
     input_path = args.input if args.input.is_absolute() else ROOT / args.input
@@ -654,15 +420,14 @@ def main() -> int:
             model=args.openrouter_model,
             batch_size=args.llm_batch_size,
             retries=max(0, args.llm_retries),
+            timeout=max(5, args.llm_timeout),
+            progress_every=max(1, args.progress_every),
         )
 
     processed = [
         process_row(
             row,
             llm_translation=translation_result.translations[i],
-            use_rule_fallback=args.rule_fallback,
-            use_openrouter=llm_enabled,
-            openrouter_model=args.openrouter_model,
         )
         for i, row in enumerate(rows)
     ]

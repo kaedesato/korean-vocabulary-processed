@@ -21,6 +21,29 @@
 - kaedesato (main@kaedesato.work)
 
 ## 環境変数
-- `OPENROUTER_API_KEY`: 日本語訳をLLM（OpenRouter）で補完したい場合に使用します。
+- `OPENROUTER_API_KEY`: 日本語訳をLLM（OpenRouter）で生成するために必須です。
 - `OPENROUTER_MODEL`: 使用するモデル名です（デフォルト: `openai/gpt-4o-mini`）。
 - 参考として [.env.example](.env.example) を置いてあります。
+
+## build_level1_anki.py の実行
+`build_level1_anki.py` は現在、全件LLM翻訳が主経路です。漢字互換置換や外来語カタカナ辞書に依存した訳語生成は行いません。
+
+### 例: まず安定重視で実行
+```bash
+python build_level1_anki.py \
+  --input level1.csv \
+  --output level1_anki_new_b25.csv \
+  --review-output level1_anki_new_review_b25.csv \
+  --llm-batch-size 20 \
+  --llm-retries 4 \
+  --llm-timeout 20 \
+  --progress-every 1
+```
+
+### 主要オプション
+- `--llm-batch-size`: 1リクエストあたりの語数（目安: 20〜50）
+- `--llm-retries`: バッチ失敗時の再試行回数
+- `--llm-timeout`: 1リクエストのタイムアウト秒数
+- `--progress-every`: 何バッチごとに進捗を表示するか
+
+実行完了時に `OpenRouter requests: ...` が表示され、実際のAPI呼び出し回数を確認できます。

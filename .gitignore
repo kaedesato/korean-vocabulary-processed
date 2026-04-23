@@ -34,3 +34,5 @@ data/raw_dictionary.jsonl
 # XLSファイル（容量大、CSV版あり）
 *.xls
 *.xlsx
+
+.env

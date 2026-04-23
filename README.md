@@ -19,3 +19,8 @@
 
 ## 作成者
 - kaedesato (main@kaedesato.work)
+
+## 環境変数
+- `OPENROUTER_API_KEY`: 日本語訳をLLM（OpenRouter）で補完したい場合に使用します。
+- `OPENROUTER_MODEL`: 使用するモデル名です（デフォルト: `openai/gpt-4o-mini`）。
+- 参考として [.env.example](.env.example) を置いてあります。

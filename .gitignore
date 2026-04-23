@@ -23,10 +23,7 @@ gha-creds-*.json
 # ログファイル
 *.log
 
-# 作業用一時ファイル（APIクロール途中経過）
-data/level1_api_progress.jsonl
-data/level1_api_raw.jsonl
-data/progress.txt
+
 
 # 大容量rawデータ（再生成可能）
 data/raw_dictionary.jsonl

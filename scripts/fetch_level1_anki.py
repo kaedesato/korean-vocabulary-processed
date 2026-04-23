@@ -10,12 +10,16 @@ Anki用CSVを生成するスクリプト。
 """
 
 import requests
+import urllib3
 import xml.etree.ElementTree as ET
 import csv
 import time
 import json
 import os
 from collections import defaultdict
+
+# krdict.korean.go.kr のTLS証明書エラーを回避
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 API_KEY = "73656C726FF52816D957CE26286BE7A9"
 BASE_URL = "https://krdict.korean.go.kr/api/search"
@@ -60,7 +64,7 @@ def robust_request(params, retries=3, timeout=20):
     headers = {"User-Agent": "Mozilla/5.0"}
     for attempt in range(retries):
         try:
-            resp = requests.get(BASE_URL, params=params, headers=headers, timeout=timeout)
+            resp = requests.get(BASE_URL, params=params, headers=headers, timeout=timeout, verify=False)
             if resp.status_code == 200:
                 return resp.content
             elif resp.status_code == 429:
@@ -157,6 +161,7 @@ def fetch_all_level1():
                     break
 
                 new_count = 0
+                new_items = []  # 今回の新規アイテムを順番通りに保持
                 for item in items:
                     tc = item.find("target_code")
                     if tc is None:
@@ -184,7 +189,7 @@ def fetch_all_level1():
                         if td is not None and td.text:
                             trans_dfns.append(td.text.strip())
 
-                    all_items[target_code] = {
+                    entry = {
                         "target_code": target_code,
                         "word": word_el.text if word_el is not None else "",
                         "sup_no": sup_el.text if sup_el is not None else "0",
@@ -193,13 +198,14 @@ def fetch_all_level1():
                         "meaning": " | ".join(trans_words),
                         "definition": " | ".join(trans_dfns),
                     }
+                    all_items[target_code] = entry
+                    new_items.append(entry)
 
-                # 新規アイテムをraw出力に追記
-                if new_count > 0:
+                # 新規アイテムをraw出力に追記（正確に今回取得分のみ）
+                if new_items:
                     with open(raw_output, "a", encoding="utf-8") as f:
-                        for code in list(seen_codes)[-new_count:]:
-                            if code in all_items:
-                                f.write(json.dumps(all_items[code], ensure_ascii=False) + "\n")
+                        for entry in new_items:
+                            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
                 if len(items) < 100 or start >= 900:
                     break

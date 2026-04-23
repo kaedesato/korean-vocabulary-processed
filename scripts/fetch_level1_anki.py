@@ -248,7 +248,7 @@ def group_and_translate(items):
         target_codes = []
 
         for e in entries:
-            p = e["pos"].strip()
+            p = (e["pos"] or "").strip()
             if p and p not in seen_pos:
                 seen_pos.add(p)
                 pos_set.append(p)

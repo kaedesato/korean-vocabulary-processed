@@ -1,6 +1,7 @@
 import argparse
 import csv
 import genanki
+import html
 import random
 from pathlib import Path
 
@@ -37,7 +38,7 @@ def create_model():
 <div class="card-content">
   <div class="word">{{Word}}</div>
   <div class="audio" style="text-align: center; margin-top: 10px;">{{Audio}}</div>
-  <hr id="answer">
+  <hr id="answer_line">
   <div class="translation">{{Translation}}</div>
   
   {{#Origin}}
@@ -119,9 +120,13 @@ def create_model():
 .translation {
   font-size: 1.8em;
   text-align: center;
-  color: #e74c3c;
+  color: #2c3e50;
   font-weight: bold;
   margin-bottom: 5px;
+}
+
+.card.nightMode .translation {
+  color: #ecf0f1;
 }
 
 .origin {
@@ -135,13 +140,13 @@ def create_model():
   color: #bdc3c7;
 }
 
-hr#answer {
+hr#answer_line {
   border: 0;
   border-bottom: 2px dashed #bdc3c7;
   margin: 20px 0;
 }
 
-.card.nightMode hr#answer {
+.card.nightMode hr#answer_line {
   border-bottom: 2px dashed #7f8c8d;
 }
 
@@ -285,14 +290,14 @@ def main():
             note = genanki.Note(
                 model=model,
                 fields=[
-                    word,
-                    translation,
-                    definition_ja,
-                    definition_ko,
-                    origin,
-                    pos,
-                    word_type,
-                    grade,
+                    html.escape(word),
+                    html.escape(translation),
+                    html.escape(definition_ja),
+                    html.escape(definition_ko),
+                    html.escape(origin),
+                    html.escape(pos),
+                    html.escape(word_type),
+                    html.escape(grade),
                     "",  # Audio
                 ],
                 tags=tags
